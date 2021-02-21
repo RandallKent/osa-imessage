@@ -93,16 +93,25 @@ function nameForHandle(handle) {
 }
 
 // Sends a message to the given handle
-function send(handle, message) {
+function send(handle, message, service = "SMS") {
     assert(typeof handle == 'string', 'handle must be a string')
     assert(typeof message == 'string', 'message must be a string')
-    return osa((handle, message, isParticipant) => {
+    return osa((handle, message, service, isParticipant) => {
         const Messages = Application('Messages')
 
         let target
 
         try {
-            target = isParticipant ? Messages.participants.whose({ handle: handle })[0] : Messages.buddies.whose({ handle: handle })[0]
+            const options = isParticipant ? Messages.participants.whose({ handle: handle }) : Messages.buddies.whose({ handle: handle })
+            let chosenIndex = 0;
+            for (let index = 0; index < options.length; index++) {
+                const option = options[index];
+                if (option.service.name().toLowerCase() === service.toLowerCase()) {
+                    chosenIndex = index;
+                }
+            }
+
+            target = options[chosenIndex];
         } catch (e) {}
 
         try {
@@ -114,7 +123,7 @@ function send(handle, message) {
         } catch (e) {
             throw new Error(`no thread with handle '${handle}'`)
         }
-    })(handle, message, isParticipant)
+    })(handle, message, service, isParticipant)
 }
 
 let emitter = null
@@ -140,6 +149,8 @@ function listen() {
             SELECT
                 guid,
                 id as handle,
+                message.service,
+                account,
                 text,
                 date,
                 date_read,
@@ -160,6 +171,7 @@ function listen() {
                     guid: msg.guid,
                     text: msg.text,
                     handle: msg.handle,
+                    service: msg.service === "SMS" ? msg.service : msg.account,
                     group: msg.cache_roomnames,
                     fromMe: !!msg.is_from_me,
                     date: fromAppleTime(msg.date),
